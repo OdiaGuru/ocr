@@ -1,0 +1,227 @@
+<html><head><base href="https://webcr-app.example.com/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR Web App</title>
+<script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #121212;
+    color: #e0e0e0;
+  }
+  .container {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .left-panel {
+    flex: 1;
+    min-width: 300px;
+    padding: 20px;
+    background-color: #1e1e1e;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    margin-right: 20px;
+    margin-bottom: 20px;
+  }
+  .right-panel {
+    flex: 1;
+    min-width: 300px;
+    padding: 20px;
+    background-color: #1e1e1e;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(255,255,255,0.1);
+  }
+  h1 {
+    color: #bb86fc;
+    margin-bottom: 20px;
+  }
+  input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #333;
+    border-radius: 5px;
+    box-sizing: border-box;
+    background-color: #2c2c2c;
+    color: #e0e0e0;
+  }
+  button {
+    background-color: #03dac6;
+    color: #000;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  button:hover {
+    background-color: #018786;
+  }
+  #imagePreview {
+    max-width: 100%;
+    height: auto;
+    border-radius: 5px;
+  }
+  #resultText {
+    width: 100%;
+    height: 200px;
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid #333;
+    border-radius: 5px;
+    resize: vertical;
+    background-color: #2c2c2c;
+    color: #e0e0e0;
+  }
+  .hidden {
+    display: none;
+  }
+  @media (max-width: 768px) {
+    .container {
+      flex-direction: column;
+    }
+    .left-panel, .right-panel {
+      width: 100%;
+      margin-right: 0;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="left-panel">
+      <h1>OCR Web App</h1>
+      <input type="file" id="fileInput" accept="image/*,application/pdf">
+      <select id="languageSelect">
+        <option value="ori">Odia</option>
+        <option value="eng">English</option>
+        <option value="swe">Swedish</option>
+        <option value="hin">Hindi</option>
+      </select>
+      <div id="imageControls" class="hidden">
+        <button id="cropBtn">Crop</button>
+        <button id="grayscaleBtn">Convert to Grayscale</button>
+      </div>
+      <button id="processBtn">Process</button>
+      <textarea id="resultText" readonly placeholder="OCR result will appear here"></textarea>
+      <button id="copyBtn">Copy to Clipboard</button>
+    </div>
+    <div class="right-panel">
+      <img id="imagePreview" class="hidden">
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const languageSelect = document.getElementById('languageSelect');
+    const imageControls = document.getElementById('imageControls');
+    const cropBtn = document.getElementById('cropBtn');
+    const grayscaleBtn = document.getElementById('grayscaleBtn');
+    const processBtn = document.getElementById('processBtn');
+    const imagePreview = document.getElementById('imagePreview');
+    const resultText = document.getElementById('resultText');
+    const copyBtn = document.getElementById('copyBtn');
+
+    let cropper;
+    let isGrayscale = false;
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file.type.startsWith('image/')) {
+        imageControls.classList.remove('hidden');
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          imagePreview.src = e.target.result;
+          imagePreview.classList.remove('hidden');
+          if (cropper) {
+            cropper.destroy();
+          }
+          cropper = new Cropper(imagePreview);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        imageControls.classList.add('hidden');
+        imagePreview.classList.add('hidden');
+      }
+    });
+
+    cropBtn.addEventListener('click', () => {
+      if (cropper) {
+        const croppedCanvas = cropper.getCroppedCanvas();
+        imagePreview.src = croppedCanvas.toDataURL();
+        cropper.destroy();
+        cropper = new Cropper(imagePreview);
+      }
+    });
+
+    grayscaleBtn.addEventListener('click', () => {
+      if (cropper) {
+        const canvas = cropper.getCroppedCanvas();
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          data[i] = data[i + 1] = data[i + 2] = avg;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        imagePreview.src = canvas.toDataURL();
+        cropper.destroy();
+        cropper = new Cropper(imagePreview);
+        isGrayscale = true;
+      }
+    });
+
+    processBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      const language = languageSelect.value;
+
+      if (file.type.startsWith('image/')) {
+        let imageData;
+        if (cropper) {
+          imageData = cropper.getCroppedCanvas().toDataURL();
+        } else {
+          imageData = imagePreview.src;
+        }
+        const result = await Tesseract.recognize(imageData, language);
+        resultText.value = result.data.text;
+      } else if (file.type === 'application/pdf') {
+        const reader = new FileReader();
+        reader.onload = async function(event) {
+          const typedarray = new Uint8Array(event.target.result);
+          const pdf = await pdfjsLib.getDocument(typedarray).promise;
+          let fullText = '';
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+          }
+          const rtfContent = `{\\rtf1\\ansi\\deff0
+{\\fonttbl{\\f0\\fnil\\fcharset0 Arial;}}
+\\viewkind4\\uc1\\pard\\f0\\fs20 ${fullText.replace(/\n/g, '\\par ')}
+}`;
+          const blob = new Blob([rtfContent], {type: 'application/rtf'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'ocr_result.rtf';
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    });
+
+    copyBtn.addEventListener('click', () => {
+      resultText.select();
+      document.execCommand('copy');
+    });
+  </script>
+</body>
+</html>
